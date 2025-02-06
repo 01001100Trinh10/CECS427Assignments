@@ -29,7 +29,7 @@ def bfs(gml, start):
     plt.figure(figsize=(10, 8))
     plt.title('BFS Tree')
 
-def parse_args():
+def main():
     parser = argparse.ArgumentParser(description="Erdős-Rényi Random Graph Generator and Analyzer")
     parser.add_argument("--input", help="Load GML for BFS")
     parser.add_argument("--create_random_graph", help="Create random gml graph")
@@ -39,7 +39,8 @@ def parse_args():
     parser.add_argument("--plot", help="Visualizes graph")
     parser.add_argument("--output", help="Defines gml file where the graph will be saved")
 
-    return parser.parse_args()
+    args =  parser.parse_args()
+    
 
-def main():
-    pass
+if __name__ == "__main__":
+    main()
