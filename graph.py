@@ -48,7 +48,7 @@ def main():
     if args.create_random_graph:
         n, c = args.create_random_graph
         n = int(n)
-        c = float(c)
+        c = int(c)
         create_random_graph(n, c, args.output)
 
     if args.BFS:
@@ -61,7 +61,7 @@ def main():
         
         shortest_paths = bfs_shortest_path(graph, args.BFS)
         for node, path in shortest_paths.items():
-            print(f"Shortest path to {node}: {path}")
+            print(f"Shortest path to {node}: {path}\nShortest path length to {node}: {len(path) - 1}")
         
     if args.plot and graph:
         plt.figure(figsize=(8, 6))
