@@ -1,6 +1,7 @@
 **INSTRUCTIONS TO USE GRAPH.PY**
 
 **Requirements before running the code:**
+
     - Python (I used version 3.11.7 for this lab)
     - numpy to compute the probability
     - networkx to perform BFS traversal
@@ -41,18 +42,19 @@ Quick Explanation on what parameters there are and how they work!
         - Stores the graph you created in the same folder that graph.py is in
 
 **Actually running the code:**
-    We will be running the code through the command prompt on Windows. In order to run the code, you must first be in the correct branch where the graph.py file is located. To do this, type the following line: "cd [INSERT PATH TO graph.py HERE]"
 
-    Now that you're in the correct directory, you are now able to run the code! If you do not have a graph, you must first create one! To do so simply type the following line:
+We will be running the code through the command prompt on Windows. In order to run the code, you must first be in the correct branch where the graph.py file is located. To do this, type the following line: "cd [INSERT PATH TO graph.py HERE]"
 
-    python ./graph.py --create_random_graph 20 1.1 --output out_graph_file.gml
+Now that you're in the correct directory, you are now able to run the code! If you do not have a graph, you must first create one! To do so simply type the following line:
 
-    Here, you created a random graph with 20 nodes and constant 1.1 and stored it in the file out_graph_file.gml. You can change up the number of nodes or the constant factor, but I found these parameters to be the best to show the graph. any number greater than 20 may create a cluttered-looking graph so be careful!
+python ./graph.py --create_random_graph 20 1.1 --output out_graph_file.gml
 
-    After creating the graph, you can type the following command(If you already have a graph file, you can replace the "out_graph_file.gml" with the graph file you wish to visualize):
+Here, you created a random graph with 20 nodes and constant 1.1 and stored it in the file out_graph_file.gml. You can change up the number of nodes or the constant factor, but I found these parameters to be the best to show the graph. any number greater than 20 may create a cluttered-looking graph so be careful!
 
-    python ./graph.py --input out_graph_file.gml --BFS 1 --plot
+After creating the graph, you can type the following command(If you already have a graph file, you can replace the "out_graph_file.gml" with the graph file you wish to visualize):
 
-    Here, you call BFS which will display all the paths from the starting node (in this case, it's 1) as well as the length of these paths. Afterwards, a BFS graph will be displayed on a separate window popup. You will notice that there are different colored edges and nodes. The gray edges represent edges that exist in the network but are not necessarily part of the BFS network because it is not the shortest path from the starting node. The red edges represent the shortest path from the current node to the starting node. There will only be one green node which will represent the starting node while all the rest of the nodes will be blue.
+python ./graph.py --input out_graph_file.gml --BFS 1 --plot
 
-    Like the previous command, you can change around the starting node. As long as the number is an existing node it will work. However, there may be nodes that are not reachable from the BFS tree, these nodes will be separated from the rest of the nodes.
+Here, you call BFS which will display all the paths from the starting node (in this case, it's 1) as well as the length of these paths. Afterwards, a BFS graph will be displayed on a separate window popup. You will notice that there are different colored edges and nodes. The gray edges represent edges that exist in the network but are not necessarily part of the BFS network because it is not the shortest path from the starting node. The red edges represent the shortest path from the current node to the starting node. There will only be one green node which will represent the starting node while all the rest of the nodes will be blue.
+
+Like the previous command, you can change around the starting node. As long as the number is an existing node it will work. However, there may be nodes that are not reachable from the BFS tree, these nodes will be separated from the rest of the nodes.
