@@ -25,19 +25,12 @@ def bfs_shortest_path(graph, start):
 # Combines arguments together to take any input in any order
 def parser_arguments():
     parser = argparse.ArgumentParser(description="Erdős-Rényi Random Graph Generator and Analyzer")
-    # input argument
     parser.add_argument("--input", help="Load GML for BFS")
-    # Create random graph. Takes in two additional input to calculate erdos renyi graph
     parser.add_argument("--create_random_graph", nargs=2, type=float, metavar=("n", "c"), help="Create random gml graph")
-    # for "n"
     parser.add_argument("--nodes", help="Number of nodes for the graph")
-    # for "c"
     parser.add_argument("--constant", help="Constant for edge probability")
-    # BFS argument
     parser.add_argument("--BFS", help="BFS based on start node")
-    # graph plotting argument
     parser.add_argument("--plot", action="store_true", help="Visualizes graph")
-    # gml file storage argument
     parser.add_argument("--output",help="Defines gml file where the graph will be saved")
     return  parser.parse_args()
     
