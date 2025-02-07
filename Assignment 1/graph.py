@@ -9,6 +9,7 @@ def create_random_graph(n, c, gml):
     p = c * np.log(n)
     p = p / n
     graph = nx.erdos_renyi_graph(n, p)
+    # Rewrites nodes as strings
     graph = nx.relabel_nodes(graph, {i: str(i) for i in graph.nodes()})
     if graph:
         nx.write_gml(graph, gml)
@@ -51,7 +52,7 @@ def main():
     if args.create_random_graph:
         n, c = args.create_random_graph
         n = int(n)
-        c = int(c)
+        c = float(c)
         create_random_graph(n, c, args.output)
     
     # Plots graph, but only if there is a graph that exists
