@@ -119,6 +119,40 @@ def plot_attribute_coloring(graph):
     plt.title("Graph colored by Attribute")
     plt.show()
     
+def verify_homophily(graph, attribute="color", num_shuffles=1000):
+    if not all(attribute in graph.nodes[n] for n in graph.nodes):
+        print(f"Error: Some nodes are missing the '{attribute}' attribute.")
+        return
+    same_type_edges = sum(
+        1 for u, v in graph.edges() if graph.nodes[u][attribute] == graph.nodes[v][attribute]
+    )
+    total_edges = graph.number_of_edges()
+
+    H = same_type_edges / total_edges if total_edges > 0 else 0
+
+    node_attributes = [graph.nodes[n][attribute] for n in graph.nodes]
+    random_homophily_scores = []
+
+    for i in range(num_shuffles):
+        np.random.shuffle(node_attributes)
+        shuffled_homophily = sum(
+            1 for u, v, in graph.edges()
+            if node_attributes[list(graph.nodes).index(u)] == node_attributes[list(graph.nodes).index(v)]
+        ) / total_edges
+        random_homophily_scores.append(shuffled_homophily)
+
+    percentile = sum(h >= h in random_homophily_scores) / num_shuffles
+
+    print(f"Observed Homophily: {H:.4f}")
+    print(f"Random Homophily (Mean): {np.mean(random_homophily_scores):.4f}")
+    print(f"Observed Homophily Percentile: {percentile:.2%}")
+
+    if percentile >= 0.95:
+        print("Homophily is statistically significant")
+    else:
+        print("No strong evidence of homophily")
+
+
 def main():
     args = parser_arguments()
     valid_CNP = {"C", "N", "P"}
@@ -141,7 +175,9 @@ def main():
         if "P" in args.plot:
             plot_attribute_coloring(graph)
 
-    
+    if args.verify_homophily:
+        verify_homophily(graph)
+
     if args.output:
         nx.write_graph(graph, args.output)
         print(f"Graph saved to {args.output}")
