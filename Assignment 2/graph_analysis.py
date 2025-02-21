@@ -2,7 +2,10 @@ import numpy as np
 import argparse
 import networkx as nx
 import matplotlib.pyplot as plt
-import plotly.graph_objects as go
+import random
+
+pos = None
+original_graph = None
 
 def parser_arguments():
     parser = argparse.ArgumentParser(description="Graph Analysis Tool")
@@ -50,9 +53,40 @@ def plot_clustering_coefficient(graph):
     plt.title("graph w/ clustering coefficients")
     plt.show()
 
+# SKIPPING FOR NOW
 def plot_neighborhood_overlap(graph):
+    overlap = {}
+    for u, v in graph.edges():
+        neighbors_u = set(graph.neighbors(u))
+        neighbors_v = set(graph.neighbors(v))
+        intersection = len(neighbors_u & neighbors_v)
+        union = len(neighbors_u | neighbors_v)
+        overlap[(u, v)] = intersection / union if union > 0 else 0
+    return overlap
+
+def plot_graph(graph):
     pass
 
+def plot_bfs_tree(root):
+    pass
+
+def on_click(event):
+    pass
+
+def plot_attribute_coloring(graph):
+    attribute = "color"
+    unique_attrs = set(nx.get_node_attributes(graph, attribute).values())
+    if not unique_attrs:
+        unique_attrs = {"default"}
+
+    color_map = {attr: (random.random(), random.random(), random.random()) for attr in unique_attrs}
+    node_colors = [color_map.get(graph.nodes[node].get(attribute, "default"), (0.5, 0.5, 0.5)) for node in graph.nodes()]
+    pos = nx.spring_layout(graph)
+    plt.figure(figsize=(10, 8))
+    nx.draw(graph, pos, node_color=node_colors, with_labels=True)
+    plt.title("Graph colored by Attribute")
+    plt.show()
+    
 def main():
     args = parser_arguments()
     valid_CNP = {"C", "N", "P"}
