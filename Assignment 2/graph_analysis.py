@@ -54,7 +54,7 @@ def plot_clustering_coefficient(graph):
     plt.show()
 
 # SKIPPING FOR NOW
-def plot_neighborhood_overlap(graph):
+def compute_neighborhood_overlap(graph):
     overlap = {}
     for u, v in graph.edges():
         neighbors_u = set(graph.neighbors(u))
@@ -65,13 +65,45 @@ def plot_neighborhood_overlap(graph):
     return overlap
 
 def plot_graph(graph):
-    pass
+    global original_graph, pos
+    original_graph = graph
+    pos = nx.spring_layout(graph)
+
+    overlap = compute_neighborhood_overlap(graph)
+
+    min_overlap, max_overlap = min(overlap.avlues(), default=0), max(overlap.values(), default=1)
+    edge_widths = [2 + 8 * (overlap[e] - min_overlap) / (max_overlap - min_overlap) if max_overlap > min_overlap else 2 for e in graph.edges()]
+
+    # Draw graph
+    fig, ax = plt.subplots(figsize=(10, 8))
+    nx.draw(graph, pos, with_labels=True, node_size=300, edge_color="black", width=edge_widths, ax=ax, picker=True)
+
+    plt.title("graph with neighborhood overlap")
+
+    fig.canvas.npl_connect("pick_event", on_click)
+
+    plt.show()
 
 def plot_bfs_tree(root):
-    pass
+    bfs_tree = nx.bfs_tree(original_graph, root)
+    plt.figure(figsize=(10, 8))
+    nx.draw(bfs_tree, pos, with_labels=True, node_size=300, edge_color="blue", node_color="cyan")
+    plt.title(f"BFS Tree from Node {root}")
+    plt.show()
 
 def on_click(event):
-    pass
+    if event.xdata is None or event.ydata is None:
+        return
+    
+    clicked_node = None
+    for node, (x, y) in pos.items():
+        if np.linalg.norm([x - event.xdata, y - event.ydata]) < 0.1:
+            clicked_node = None
+            break
+
+    if clicked_node:
+        plt.close()
+        plot_bfs_tree(clicked_node)
 
 def plot_attribute_coloring(graph):
     attribute = "color"
@@ -102,8 +134,14 @@ def main():
         graph = partition_graph(graph, args.components)
 
     if args.plot:
-        pass
+        if "C" in args.plot:
+            plot_clustering_coefficient(graph)
+        if "N" in args.plot:
+            plot_graph(graph)
+        if "P" in args.plot:
+            plot_attribute_coloring(graph)
 
+    
     if args.output:
         nx.write_graph(graph, args.output)
         print(f"Graph saved to {args.output}")
