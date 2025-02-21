@@ -2,6 +2,7 @@ import numpy as np
 import argparse
 import networkx as nx
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 def parser_arguments():
     parser = argparse.ArgumentParser(description="Graph Analysis Tool")
@@ -33,13 +34,24 @@ def plot_clustering_coefficient(graph):
     cluster_min, cluster_max = min(clustering.values()), max(clustering.values())
     min_pixel, max_pixel = 50, 300
 
-    node_sizes = {
+    node_size = {
         v: min_pixel + (clustering[v] - cluster_min) / (cluster_max - cluster_min) * (max_pixel - min_pixel)
         if cluster_max != cluster_min else min_pixel for v in graph.nodes()
     }
 
     max_degree = max(degrees.valeus()) if degrees else 1
-    node_colors = [()]
+    node_colors = [(254 * (degrees[v] / max_degree), 0, 254) for v in graph.nodes()]
+
+    # Draw Graph
+    pos = nx.spring_layout(graph)
+    plt.figure(figsize=(10, 8))
+    nx.draw(graph, pos, node_size=[node_size[v] for v in graph.nodes()], node_color=node_colors, with_labels=True)
+
+    plt.title("graph w/ clustering coefficients")
+    plt.show()
+
+def plot_neighborhood_overlap(graph):
+    pass
 
 def main():
     args = parser_arguments()
