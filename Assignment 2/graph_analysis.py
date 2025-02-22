@@ -2,11 +2,13 @@ import numpy as np
 import argparse
 import networkx as nx
 import matplotlib.pyplot as plt
+from scipy.stats import ttest_1samp
 import random
 
 pos = None
 original_graph = None
 
+# Combines arguments together to take any input in any order
 def parser_arguments():
     parser = argparse.ArgumentParser(description="Graph Analysis Tool")
     parser.add_argument("graph_file", type=str, help="Path to the input .gml graph file")
@@ -29,10 +31,10 @@ def partition_graph(graph, n):
     print(f"Graph has been partitioned into {n} components.")
     return graph
 
+# Plots the graph highlighting clustering coefficients
 def plot_clustering_coefficient(graph):
-    """Plots the graph highlighting clustering coefficients."""
-    
-    pos = nx.spring_layout(graph)  # Compute node positions
+    # Compute node positions
+    pos = nx.spring_layout(graph)
     
     # Compute clustering coefficients
     clustering_coeffs = nx.clustering(graph)
@@ -51,17 +53,20 @@ def plot_clustering_coefficient(graph):
     # Compute node colors based on degree
     degrees = dict(graph.degree())
     max_degree = max(degrees.values())
-    normalized_degrees = {v: degrees[v] / max_degree for v in graph.nodes()}  # Normalize to [0, 1]
+
+    # Normalize to [0, 1]
+    normalized_degrees = {v: degrees[v] / max_degree for v in graph.nodes()}
     
     # Assign the colors so that Blue low degree and Magenta as high degree
-    node_colors = [(sv, 0, 1) for sv in normalized_degrees.values()]  # Matplotlib expects colors in range [0,1]
+    node_colors = [(sv, 0, 1) for sv in normalized_degrees.values()]
     
     # Draw the graph
     plt.figure(figsize=(10, 7))
     nx.draw(
         graph, pos,
         node_size=[node_size[v] for v in graph.nodes()],
-        node_color=node_colors,  # Use normalized colors
+        # Use normalized colors
+        node_color=node_colors,
         with_labels=True
     )
     
@@ -95,7 +100,9 @@ def plot_graph(graph):
     fig, ax = plt.subplots(figsize=(10, 8))
 
     # Draw nodes and edges separately
-    node_scatter = nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=300)  # No picker argument here
+    node_scatter = nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=300)
+      
+    # Set picker manually (5 pixels tolerance for clicks)
     node_scatter.set_picker(5)  # Set picker manually (5 pixels tolerance for clicks)
 
     nx.draw_networkx_edges(graph, pos, ax=ax, edge_color="black", width=edge_widths)
@@ -162,42 +169,63 @@ def plot_attribute_coloring(graph):
 
     color_map = {attr: (random.random(), random.random(), random.random()) for attr in unique_attrs}
     node_colors = [color_map.get(graph.nodes[node].get(attribute, "default"), (0.5, 0.5, 0.5)) for node in graph.nodes()]
+    edge_colors = []
+    for u, v in graph.edges():
+        if 'sign' in graph.edges[u, v]:
+            if graph.edges[u, v]['sign'] == '+':
+                edge_colors.append('red')
+            elif graph.edges[u, v]['sign'] == '-':
+                edge_colors.append('black')
+            else:
+                edge_colors.append('gray')
+        else:
+            edge_colors.append('gray')
     pos = nx.spring_layout(graph)
     plt.figure(figsize=(10, 8))
-    nx.draw(graph, pos, node_color=node_colors, with_labels=True)
+    nx.draw(graph, pos, node_color=node_colors, edge_color=edge_colors, with_labels=True)
     plt.title("Graph colored by Attribute")
     plt.show()
     
-def verify_homophily(graph, attribute="color", num_shuffles=1000):
+# Test for homophily based on a categorical node attribute
+def verify_homophily(graph, attribute="color"):
+    # Check if all nodes have the attribute
     if not all(attribute in graph.nodes[n] for n in graph.nodes):
         print(f"Error: Some nodes are missing the '{attribute}' attribute.")
         return
-    same_type_edges = sum(
-        1 for u, v in graph.edges() if graph.nodes[u][attribute] == graph.nodes[v][attribute]
-    )
+    
+    same_type_edges = 0
     total_edges = graph.number_of_edges()
 
+    # Count edges where both nodes share the same attribute
+    for u, v in graph.edges():
+        if graph.nodes[u][attribute] == graph.nodes[v][attribute]:
+            same_type_edges += 1
+
+    # Compute homophily ratio
     H = same_type_edges / total_edges if total_edges > 0 else 0
 
+    # Generate random expectation for homophily (null hypothesis)
     node_attributes = [graph.nodes[n][attribute] for n in graph.nodes]
     random_homophily_scores = []
-
-    for i in range(num_shuffles):
+    
+    # 1000 random shuffles
+    for _ in range(1000):
         np.random.shuffle(node_attributes)
         shuffled_homophily = sum(
-            1 for u, v, in graph.edges()
-            if node_attributes[list(graph.nodes).index(u)] == node_attributes[list(graph.nodes).index(v)]
+            node_attributes[list(graph.nodes).index(u)] == node_attributes[list(graph.nodes).index(v)]
+            for u, v in graph.edges()
         ) / total_edges
         random_homophily_scores.append(shuffled_homophily)
+    
+    # Perform Student's t-test
+    t_stat, p_value = ttest_1samp(random_homophily_scores, H)
 
-    percentile = sum(h >= H for h in random_homophily_scores) / num_shuffles
-
+    # Display results
     print(f"Observed Homophily: {H:.4f}")
-    print(f"Random Homophily (Mean): {np.mean(random_homophily_scores):.4f}")
-    print(f"Observed Homophily Percentile: {percentile:.2%}")
+    print(f"T-test p-value: {p_value:.4f}")
 
-    if percentile >= 0.95:
-        print("Homophily is statistically significant")
+    if p_value < 0.05:
+        print("Homophily is statistically significant (p < 0.05)")
     else:
         print("No strong evidence of homophily")
 
@@ -220,14 +248,17 @@ def verify_balanced_graph(graph):
 
 
 def main():
+    # Fetch arg combination
     args = parser_arguments()
-    # valid_CNP = {"C", "N", "P"}
 
+    # Reads gml file
     graph = nx.read_gml(args.graph_file)
 
+    # Calls partition_graph
     if args.components:
         graph = partition_graph(graph, args.components)
 
+    # Plots graph based on if they receive C, N, or P
     if args.plot:
         if "C" in args.plot:
             plot_clustering_coefficient(graph)
@@ -236,12 +267,15 @@ def main():
         if "P" in args.plot:
             plot_attribute_coloring(graph)
 
+    # Verifies if the graph has evidence of a homophily
     if args.verify_homophily:
         verify_homophily(graph)
 
+    # Verifies if the graph is balanced
     if args.verify_balanced_graph:
         verify_balanced_graph(graph)
 
+    # Saves the file into an output file
     if args.output:
         nx.write_graph(graph, args.output)
         print(f"Graph saved to {args.output}")
