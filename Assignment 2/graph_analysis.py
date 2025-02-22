@@ -53,7 +53,6 @@ def plot_clustering_coefficient(graph):
     plt.title("graph w/ clustering coefficients")
     plt.show()
 
-# SKIPPING FOR NOW
 def compute_neighborhood_overlap(graph):
     overlap = {}
     for u, v in graph.edges():
@@ -152,6 +151,37 @@ def verify_homophily(graph, attribute="color", num_shuffles=1000):
     else:
         print("No strong evidence of homophily")
 
+def verify_balanced_graph(graph):
+    if not all('sign' in graph.edges[edge] for edge in graph.edges):
+        print("Error: Some edges are missing the 'sign' attribute.")
+        return
+    
+    unbalanced_triangles = 0
+    balanced_triangles = 0
+
+    for triangle in nx.enumerate_all_cliques(graph):
+        if len(triangle) == 3:
+            u, v, w = triangle
+
+            sign_uv = graph.edges[u, v]['sign']
+            sign_vw = graph.edges[v, w]['sign']
+            sign_wu = graph.edges[w, u]['sign']
+
+            negative_edges = sum([sign_uv, sign_vw, sign_wu]) == -1
+
+            if negative_edges in [0, 2]:
+                balanced_triangles += 1
+            else:
+                unbalanced_triangles += 1
+
+            print(f"Balanced Triangles: {balanced_triangles}")
+            print(f"Unbalanced Triangles: {unbalanced_triangles}")
+
+            if unbalanced_triangles ==0:
+                print("The graph is balanced.")
+            else:
+                print("The graph is NOT balanced.")
+
 
 def main():
     args = parser_arguments()
@@ -177,6 +207,9 @@ def main():
 
     if args.verify_homophily:
         verify_homophily(graph)
+
+    if args.verify_balanced_graph:
+        verify_balanced_graph(graph)
 
     if args.output:
         nx.write_graph(graph, args.output)
