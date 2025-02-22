@@ -40,7 +40,8 @@ def plot_clustering_coefficient(graph):
     cluster_max = max(clustering_coeffs.values())
 
     # Compute node sizes based on clustering coefficient
-    min_pixel, max_pixel = 100, 1000  # Define min and max sizes
+    # Define min and max sizes
+    min_pixel, max_pixel = 100, 1000 
     node_size = {
         v: min_pixel + ((clustering_coeffs[v] - cluster_min) / (cluster_max - cluster_min) * (max_pixel - min_pixel))
         if cluster_max > cluster_min else min_pixel  # Avoid division by zero
@@ -52,7 +53,7 @@ def plot_clustering_coefficient(graph):
     max_degree = max(degrees.values())
     normalized_degrees = {v: degrees[v] / max_degree for v in graph.nodes()}  # Normalize to [0, 1]
     
-    # Assign color: Blue (low degree) → Magenta (high degree)
+    # Assign the colors so that Blue low degree and Magenta as high degree
     node_colors = [(sv, 0, 1) for sv in normalized_degrees.values()]  # Matplotlib expects colors in range [0,1]
     
     # Draw the graph
@@ -141,9 +142,11 @@ def _hierarchy_pos(G, root, width=2.0, vert_gap=0.5, vert_loc=0, xcenter=0.5, po
     return pos
 
 def on_click(event):
-    ind = event.ind  # Get the index of the clicked node(s)
+    # Get the index of the clicked node(s)
+    ind = event.ind 
     if ind is not None and len(ind) > 0:
-        clicked_node = list(original_graph.nodes())[ind[0]]  # Get corresponding node
+        # Get corresponding node
+        clicked_node = list(original_graph.nodes())[ind[0]] 
         print(f"Clicked on node: {clicked_node}")
 
         # Close the current plot and show BFS tree
@@ -199,47 +202,21 @@ def verify_homophily(graph, attribute="color", num_shuffles=1000):
         print("No strong evidence of homophily")
 
 def verify_balanced_graph(graph):
-    if not all('sign' in graph.edges[edge] for edge in graph.edges):
-        print("Error: Some edges are missing the 'sign' attribute.")
-        return
-    
-    unbalanced_triangles = 0
-    balanced_triangles = 0
-
-    def convert_sign(sign):
-        return 1 if sign == "+" else -1 if sign == "-" else int(sign)
-
-    for triangle in nx.enumerate_all_cliques(graph):
-        if len(triangle) == 3:
-            u, v, w = triangle
-
-            if not (graph.has_edge(u, v) and graph.has_edge(v, w) and graph.has_edge(w, u)):
-                print(f"Error: Missing edge in triangle {u}-{v}-{w}")
-                continue
-
-            try:
-                # Convert 'sign' attribute safely
-                sign_uv = convert_sign(graph.edges[u, v]['sign'])
-                sign_vw = convert_sign(graph.edges[v, w]['sign'])
-                sign_wu = convert_sign(graph.edges[w, u]['sign'])
-            except ValueError:
-                print(f"Error: Invalid sign attribute in edges {u}-{v}, {v}-{w}, {w}-{u}")
-                return
-
-            negative_edges = sum(s < 0 for s in [sign_uv, sign_vw, sign_wu])
-
-            if negative_edges in [0, 2]:
-                balanced_triangles += 1
-            else:
-                unbalanced_triangles += 1
-
-    print(f"Balanced Triangles: {balanced_triangles}")
-    print(f"Unbalanced Triangles: {unbalanced_triangles}")
-
-    if unbalanced_triangles == 0:
-        print("The graph is balanced.")
+    balanced = True
+    cycles = list(nx.cycle_basis(graph))
+    for cycle in cycles:
+        negative_edges = 0
+        for i in range(len(cycle)):
+            u, v = cycle[i], cycle[(i + 1) % len(cycle)]
+            if graph[u][v]["sign"] == "-":
+                negative_edges += 1
+        if negative_edges % 2 != 0:
+            balanced = False
+            break
+    if balanced is True:
+        print("balanced")
     else:
-        print("The graph is NOT balanced.")
+        print("NOT balanced")
 
 
 def main():
