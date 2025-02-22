@@ -1,10 +1,5 @@
 import subprocess
 import os
-import numpy as np
-import argparse
-import networkx as nx
-import matplotlib.pyplot as plt
-import random
 
 directory_path = './'
 python ="python3"

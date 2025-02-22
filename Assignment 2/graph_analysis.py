@@ -19,15 +19,18 @@ def parser_arguments():
     parser.add_argument("--output", type=str, help="Saves the updated graph data to out_graph_file.gml")
     return  parser.parse_args()
 
+# Partitions the graph into subgraphs
 def partition_graph(graph, n):
     if nx.number_connected_components(graph) >= n:
         print(f"Graph already has {nx.number_connected_components(graph)} components.")
         return graph
+    # Removes edges based on betweenness until the graph reaches n components
     while nx.number_connected_components(graph) < n:
         betweenness = nx.edge_betweenness_centrality(graph)
         edge_to_remove = max(betweenness, key=betweenness.get)
         graph.remove_edge(*edge_to_remove)
         print(f"removed edge: {edge_to_remove}")
+    # Success message
     print(f"Graph has been partitioned into {n} components.")
     return graph
 
@@ -72,8 +75,10 @@ def plot_clustering_coefficient(graph):
     
     plt.show()
 
+# Computes neighborhood overlap based on adjacent nodes
 def compute_neighborhood_overlap(graph):
     overlap = {}
+    # Stores overlap until all edges are exhausted
     for u, v in graph.edges():
         neighbors_u = set(graph.neighbors(u))
         neighbors_v = set(graph.neighbors(v))
@@ -83,13 +88,16 @@ def compute_neighborhood_overlap(graph):
     return overlap
 
 def plot_graph(graph):
+    # Uses global variables to retrieve unaltered graphs
     global original_graph, pos
     original_graph = graph
     pos = nx.spring_layout(graph)
 
+    # Computes neighborhood overlap
     overlap = compute_neighborhood_overlap(graph)
 
     min_overlap, max_overlap = min(overlap.values(), default=0), max(overlap.values(), default=1)
+    # Adjusts width based on overlap
     edge_widths = [
         2 + 8 * (overlap[e] - min_overlap) / (max_overlap - min_overlap)
         if max_overlap > min_overlap else 2
@@ -102,8 +110,8 @@ def plot_graph(graph):
     # Draw nodes and edges separately
     node_scatter = nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=300)
       
-    # Set picker manually (5 pixels tolerance for clicks)
-    node_scatter.set_picker(5)  # Set picker manually (5 pixels tolerance for clicks)
+    # Set picker manually
+    node_scatter.set_picker(5)
 
     nx.draw_networkx_edges(graph, pos, ax=ax, edge_color="black", width=edge_widths)
     nx.draw_networkx_labels(graph, pos, ax=ax)
@@ -117,19 +125,27 @@ def plot_graph(graph):
 
 
 def plot_bfs_tree(root):
+    # Sets up BFS of the graph
     bfs_tree = nx.bfs_tree(original_graph, root)
     pos = hierarchy_pos(bfs_tree, root)
     
-    plt.figure(figsize=(12, 10))
-    nx.draw(bfs_tree, pos, with_labels=True, node_size=300, edge_color="blue", node_color="cyan")
+    # Draws BFS graph
+    fig, ax = plt.subplots(figsize=(12, 10))
+    nx.draw(bfs_tree, pos, with_labels=True, node_size=300, edge_color="blue", node_color="cyan", ax=ax)
     plt.title(f"BFS Tree from Node {root}")
+
+    # Sets button to return to original graph
+    fig.canvas.mpl_connect("button_press_event", lambda event: return_to_original(event, fig))
+
     plt.show()
 
 def hierarchy_pos(G, root=None, width=2.0, vert_gap=0.5, vert_loc=0, xcenter=0.5):
+    # Recursively iterates through the tree
     pos = _hierarchy_pos(G, root, width, vert_gap, vert_loc, xcenter)
     return pos
 
 def _hierarchy_pos(G, root, width=2.0, vert_gap=0.5, vert_loc=0, xcenter=0.5, pos=None, parent=None, parsed=[]):
+    # Explores leaves
     if pos is None:
         pos = {root: (xcenter, vert_loc)}
     else:
@@ -138,7 +154,8 @@ def _hierarchy_pos(G, root, width=2.0, vert_gap=0.5, vert_loc=0, xcenter=0.5, po
     children = list(G.neighbors(root))
     if not isinstance(G, nx.DiGraph) and parent is not None:
         children.remove(parent)  
-        
+    
+    # Organizes the layout to be easier to view
     if len(children) != 0:
         dx = width / len(children) 
         nextx = xcenter - width/2 - dx/2
@@ -147,6 +164,11 @@ def _hierarchy_pos(G, root, width=2.0, vert_gap=0.5, vert_loc=0, xcenter=0.5, po
             pos = _hierarchy_pos(G, child, width=dx, vert_gap=vert_gap, vert_loc=vert_loc-vert_gap, xcenter=nextx, pos=pos, parent=root, parsed=parsed)
     
     return pos
+
+# Closes the BFS plot and re-plots the original graph when clicked
+def return_to_original(event, fig):
+    plt.close(fig)
+    plot_graph(original_graph)
 
 def on_click(event):
     # Get the index of the clicked node(s)
@@ -162,6 +184,7 @@ def on_click(event):
 
 
 def plot_attribute_coloring(graph):
+    # Fetches color
     attribute = "color"
     unique_attrs = set(nx.get_node_attributes(graph, attribute).values())
     if not unique_attrs:
@@ -170,6 +193,7 @@ def plot_attribute_coloring(graph):
     color_map = {attr: (random.random(), random.random(), random.random()) for attr in unique_attrs}
     node_colors = [color_map.get(graph.nodes[node].get(attribute, "default"), (0.5, 0.5, 0.5)) for node in graph.nodes()]
     edge_colors = []
+    # Fetches the edges to see if they're negative (black), positive (red), or neither (gray)
     for u, v in graph.edges():
         if 'sign' in graph.edges[u, v]:
             if graph.edges[u, v]['sign'] == '+':
@@ -180,6 +204,7 @@ def plot_attribute_coloring(graph):
                 edge_colors.append('gray')
         else:
             edge_colors.append('gray')
+    # Draws graph
     pos = nx.spring_layout(graph)
     plt.figure(figsize=(10, 8))
     nx.draw(graph, pos, node_color=node_colors, edge_color=edge_colors, with_labels=True)
@@ -231,16 +256,21 @@ def verify_homophily(graph, attribute="color"):
 
 def verify_balanced_graph(graph):
     balanced = True
+    # Fetches all the cycles in the graph
     cycles = list(nx.cycle_basis(graph))
+    # Iterates through all the cycles
     for cycle in cycles:
         negative_edges = 0
         for i in range(len(cycle)):
+            # Increments on all the negative edges
             u, v = cycle[i], cycle[(i + 1) % len(cycle)]
             if graph[u][v]["sign"] == "-":
                 negative_edges += 1
+        # If the negative edges are odd, then we break and keep it false
         if negative_edges % 2 != 0:
             balanced = False
             break
+    # If negative edges are even then we have a balanced graph! Otherwise it's unbalanced.
     if balanced is True:
         print("balanced")
     else:
@@ -266,6 +296,8 @@ def main():
             plot_graph(graph)
         if "P" in args.plot:
             plot_attribute_coloring(graph)
+        else:
+            print("Invalid Input: Must be C, N, or P")
 
     # Verifies if the graph has evidence of a homophily
     if args.verify_homophily:
