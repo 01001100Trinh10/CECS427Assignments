@@ -9,7 +9,7 @@ original_graph = None
 
 def parser_arguments():
     parser = argparse.ArgumentParser(description="Graph Analysis Tool")
-    parser.add_argument("--input", type=str, help="Path to the input .gml graph file")
+    parser.add_argument("graph_file", type=str, help="Path to the input .gml graph file")
     parser.add_argument("--components", type=int, help="Number of components to partition the graph into")
     parser.add_argument("--plot", type=str, help="Specify C, N, or P for plotting")
     parser.add_argument("--verify_homophily", action="store_true", help="Verify Homophily for the Graph")
@@ -18,7 +18,7 @@ def parser_arguments():
     return  parser.parse_args()
 
 def partition_graph(graph, n):
-    if nx.number_connected_components(graph) >= graph:
+    if nx.number_connected_components(graph) >= n:
         print(f"Graph already has {nx.number_connected_components(graph)} components.")
         return graph
     while nx.number_connected_components(graph) < n:
@@ -30,27 +30,40 @@ def partition_graph(graph, n):
     return graph
 
 def plot_clustering_coefficient(graph):
-    clustering = nx.clustering(graph)
-    degrees = dict(graph.degree())
+    """Plots the graph highlighting clustering coefficients."""
+    
+    pos = nx.spring_layout(graph)  # Compute node positions
+    
+    # Compute clustering coefficients
+    clustering_coeffs = nx.clustering(graph)
+    cluster_min = min(clustering_coeffs.values())
+    cluster_max = max(clustering_coeffs.values())
 
-    # Normalize
-    cluster_min, cluster_max = min(clustering.values()), max(clustering.values())
-    min_pixel, max_pixel = 50, 300
-
+    # Compute node sizes based on clustering coefficient
+    min_pixel, max_pixel = 100, 1000  # Define min and max sizes
     node_size = {
-        v: min_pixel + (clustering[v] - cluster_min) / (cluster_max - cluster_min) * (max_pixel - min_pixel)
-        if cluster_max != cluster_min else min_pixel for v in graph.nodes()
+        v: min_pixel + ((clustering_coeffs[v] - cluster_min) / (cluster_max - cluster_min) * (max_pixel - min_pixel))
+        if cluster_max > cluster_min else min_pixel  # Avoid division by zero
+        for v in graph.nodes()
     }
 
-    max_degree = max(degrees.valeus()) if degrees else 1
-    node_colors = [(254 * (degrees[v] / max_degree), 0, 254) for v in graph.nodes()]
-
-    # Draw Graph
-    pos = nx.spring_layout(graph)
-    plt.figure(figsize=(10, 8))
-    nx.draw(graph, pos, node_size=[node_size[v] for v in graph.nodes()], node_color=node_colors, with_labels=True)
-
-    plt.title("graph w/ clustering coefficients")
+    # Compute node colors based on degree
+    degrees = dict(graph.degree())
+    max_degree = max(degrees.values())
+    normalized_degrees = {v: degrees[v] / max_degree for v in graph.nodes()}  # Normalize to [0, 1]
+    
+    # Assign color: Blue (low degree) → Magenta (high degree)
+    node_colors = [(sv, 0, 1) for sv in normalized_degrees.values()]  # Matplotlib expects colors in range [0,1]
+    
+    # Draw the graph
+    plt.figure(figsize=(10, 7))
+    nx.draw(
+        graph, pos,
+        node_size=[node_size[v] for v in graph.nodes()],
+        node_color=node_colors,  # Use normalized colors
+        with_labels=True
+    )
+    
     plt.show()
 
 def compute_neighborhood_overlap(graph):
@@ -70,39 +83,73 @@ def plot_graph(graph):
 
     overlap = compute_neighborhood_overlap(graph)
 
-    min_overlap, max_overlap = min(overlap.avlues(), default=0), max(overlap.values(), default=1)
-    edge_widths = [2 + 8 * (overlap[e] - min_overlap) / (max_overlap - min_overlap) if max_overlap > min_overlap else 2 for e in graph.edges()]
+    min_overlap, max_overlap = min(overlap.values(), default=0), max(overlap.values(), default=1)
+    edge_widths = [
+        2 + 8 * (overlap[e] - min_overlap) / (max_overlap - min_overlap)
+        if max_overlap > min_overlap else 2
+        for e in graph.edges()
+    ]
 
     # Draw graph
     fig, ax = plt.subplots(figsize=(10, 8))
-    nx.draw(graph, pos, with_labels=True, node_size=300, edge_color="black", width=edge_widths, ax=ax, picker=True)
 
-    plt.title("graph with neighborhood overlap")
+    # Draw nodes and edges separately
+    node_scatter = nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=300)  # No picker argument here
+    node_scatter.set_picker(5)  # Set picker manually (5 pixels tolerance for clicks)
 
-    fig.canvas.npl_connect("pick_event", on_click)
+    nx.draw_networkx_edges(graph, pos, ax=ax, edge_color="black", width=edge_widths)
+    nx.draw_networkx_labels(graph, pos, ax=ax)
+
+    plt.title("Graph with Neighborhood Overlap")
+
+    # Connect click event
+    fig.canvas.mpl_connect("pick_event", on_click)
 
     plt.show()
 
+
 def plot_bfs_tree(root):
     bfs_tree = nx.bfs_tree(original_graph, root)
-    plt.figure(figsize=(10, 8))
+    pos = hierarchy_pos(bfs_tree, root)
+    
+    plt.figure(figsize=(12, 10))
     nx.draw(bfs_tree, pos, with_labels=True, node_size=300, edge_color="blue", node_color="cyan")
     plt.title(f"BFS Tree from Node {root}")
     plt.show()
 
-def on_click(event):
-    if event.xdata is None or event.ydata is None:
-        return
-    
-    clicked_node = None
-    for node, (x, y) in pos.items():
-        if np.linalg.norm([x - event.xdata, y - event.ydata]) < 0.1:
-            clicked_node = None
-            break
+def hierarchy_pos(G, root=None, width=2.0, vert_gap=0.5, vert_loc=0, xcenter=0.5):
+    pos = _hierarchy_pos(G, root, width, vert_gap, vert_loc, xcenter)
+    return pos
 
-    if clicked_node:
+def _hierarchy_pos(G, root, width=2.0, vert_gap=0.5, vert_loc=0, xcenter=0.5, pos=None, parent=None, parsed=[]):
+    if pos is None:
+        pos = {root: (xcenter, vert_loc)}
+    else:
+        pos[root] = (xcenter, vert_loc)
+        
+    children = list(G.neighbors(root))
+    if not isinstance(G, nx.DiGraph) and parent is not None:
+        children.remove(parent)  
+        
+    if len(children) != 0:
+        dx = width / len(children) 
+        nextx = xcenter - width/2 - dx/2
+        for child in children:
+            nextx += dx
+            pos = _hierarchy_pos(G, child, width=dx, vert_gap=vert_gap, vert_loc=vert_loc-vert_gap, xcenter=nextx, pos=pos, parent=root, parsed=parsed)
+    
+    return pos
+
+def on_click(event):
+    ind = event.ind  # Get the index of the clicked node(s)
+    if ind is not None and len(ind) > 0:
+        clicked_node = list(original_graph.nodes())[ind[0]]  # Get corresponding node
+        print(f"Clicked on node: {clicked_node}")
+
+        # Close the current plot and show BFS tree
         plt.close()
         plot_bfs_tree(clicked_node)
+
 
 def plot_attribute_coloring(graph):
     attribute = "color"
@@ -140,7 +187,7 @@ def verify_homophily(graph, attribute="color", num_shuffles=1000):
         ) / total_edges
         random_homophily_scores.append(shuffled_homophily)
 
-    percentile = sum(h >= h in random_homophily_scores) / num_shuffles
+    percentile = sum(h >= H for h in random_homophily_scores) / num_shuffles
 
     print(f"Observed Homophily: {H:.4f}")
     print(f"Random Homophily (Mean): {np.mean(random_homophily_scores):.4f}")
@@ -159,40 +206,47 @@ def verify_balanced_graph(graph):
     unbalanced_triangles = 0
     balanced_triangles = 0
 
+    def convert_sign(sign):
+        return 1 if sign == "+" else -1 if sign == "-" else int(sign)
+
     for triangle in nx.enumerate_all_cliques(graph):
         if len(triangle) == 3:
             u, v, w = triangle
 
-            sign_uv = graph.edges[u, v]['sign']
-            sign_vw = graph.edges[v, w]['sign']
-            sign_wu = graph.edges[w, u]['sign']
+            if not (graph.has_edge(u, v) and graph.has_edge(v, w) and graph.has_edge(w, u)):
+                print(f"Error: Missing edge in triangle {u}-{v}-{w}")
+                continue
 
-            negative_edges = sum([sign_uv, sign_vw, sign_wu]) == -1
+            try:
+                # Convert 'sign' attribute safely
+                sign_uv = convert_sign(graph.edges[u, v]['sign'])
+                sign_vw = convert_sign(graph.edges[v, w]['sign'])
+                sign_wu = convert_sign(graph.edges[w, u]['sign'])
+            except ValueError:
+                print(f"Error: Invalid sign attribute in edges {u}-{v}, {v}-{w}, {w}-{u}")
+                return
+
+            negative_edges = sum(s < 0 for s in [sign_uv, sign_vw, sign_wu])
 
             if negative_edges in [0, 2]:
                 balanced_triangles += 1
             else:
                 unbalanced_triangles += 1
 
-            print(f"Balanced Triangles: {balanced_triangles}")
-            print(f"Unbalanced Triangles: {unbalanced_triangles}")
+    print(f"Balanced Triangles: {balanced_triangles}")
+    print(f"Unbalanced Triangles: {unbalanced_triangles}")
 
-            if unbalanced_triangles ==0:
-                print("The graph is balanced.")
-            else:
-                print("The graph is NOT balanced.")
+    if unbalanced_triangles == 0:
+        print("The graph is balanced.")
+    else:
+        print("The graph is NOT balanced.")
 
 
 def main():
     args = parser_arguments()
-    valid_CNP = {"C", "N", "P"}
+    # valid_CNP = {"C", "N", "P"}
 
-    if args.input:
-        try:
-            graph = nx.read_gml(args.input)
-            print(f"Loaded graph from {args.input}.")
-        except FileNotFoundError:
-            print(f"Error: File {args.input} not found.")
+    graph = nx.read_gml(args.graph_file)
 
     if args.components:
         graph = partition_graph(graph, args.components)
