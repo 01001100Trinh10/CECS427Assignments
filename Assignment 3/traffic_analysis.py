@@ -3,7 +3,7 @@ import argparse
 import networkx as nx
 import matplotlib.pyplot as plt
 
-
+# Combines arguments together to take any input in any order
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("graph_file", type=str, help="Path to the .gml file")
@@ -15,15 +15,29 @@ def parse_arguments():
 
 
 def cost_function(flow, a, b):
-    """Compute the travel cost for a given flow on an edge."""
-    return (a * flow) + b
+    #Compute the travel cost for a given flow on an edge.
+    return ((a * flow) + b)
 
+# Gets potential energy
+def pe(flow, a, b):
+    nflow = 0
+    nb = 0
+    while(flow != 0):
+        nflow += flow
+        nb += 1
+        flow -= 1
+    return (a * nflow) + (b * nb)
+
+# Gets travel time
+def tt(flow, a, b):
+    f = 0
+    # In case a in ax is 0
+    if (a != 0):
+        f = flow
+    return (f * flow) + (b * flow)
 
 def compute_nash_equilibrium(graph, n, start, end):
-    """
-    Computes the Nash Equilibrium where each vehicle selfishly chooses the lowest-cost path
-    and no vehicle can switch to improve their travel time.
-    """
+    #Computes the Nash Equilibrium where each vehicle selfishly chooses the lowest-cost path and no vehicle can switch to improve their travel time.
     flow_distribution = {edge: 0 for edge in graph.edges()}
 
     for _ in range(n):  # Distribute each vehicle
@@ -36,63 +50,63 @@ def compute_nash_equilibrium(graph, n, start, end):
 
     return flow_distribution
 
+def compute_social_optimum(graph, vehicles, start, end, flow_distribution=None):
+    #Recursively compute the social optimum by distributing vehicles to minimize total system cost.
+    
+    if flow_distribution is None:
+        flow_distribution = {edge: 0 for edge in graph.edges()}  # Initialize flow distribution
 
-def social_objective(flow, graph):
-    """
-    Computes the total system cost for a given flow.
-    """
-    total_cost = 0
-    for (u, v), f in flow.items():
-        a, b = graph[u][v]["a"], graph[u][v]["b"]
-        total_cost += cost_function(f, a, b) * f  # Total system cost
-    return total_cost
+    # Base Case if all vehicles are assigned, return the distribution
+    if vehicles == 0:
+        return flow_distribution
 
-
-def compute_social_optimum(graph, vehicles, start, end):
-    """Compute the socially optimal path that minimizes the total system cost."""
+    # Get all simple paths from start to end
     all_paths = list(nx.all_simple_paths(graph, start, end))
-    min_cost = float("inf")
-    best_path = None
 
+    if not all_paths:
+        return flow_distribution  # No valid paths
+
+    # Compute the total system cost for each path **with all vehicles**
+    path_costs = []
     for path in all_paths:
         total_cost = 0
         for i in range(len(path) - 1):
             u, v = path[i], path[i + 1]
             a, b = graph[u][v]["a"], graph[u][v]["b"]
-            total_cost += sum(cost_function(x, a, b) for x in range(1, vehicles + 1))
+            flow = flow_distribution[(u, v)] + 1
+            for j in range(1, vehicles + 1):
+                total_cost += tt(flow, a, b)
+                total_cost += cost_function(flow, a, b)
+            # total_cost += sum(tt(flow, a, b) for x in range(1, vehicles + 1))  # Consider all vehicles
+        
+        path_costs.append((path, total_cost))
 
-        if total_cost < min_cost:
-            min_cost = total_cost
-            best_path = path
+    # Select the path
+    path_costs.sort(key=lambda x: x[1])  # Sort paths by total system cost
+    best_path = path_costs[0][0]  # Best path based on min cost
 
-    # Initialize flow distribution dictionary
-    flow_distribution = {edge: 0 for edge in graph.edges()}
+    # Assign a vehicle
+    for i in range(len(best_path) - 1):
+        edge = (best_path[i], best_path[i + 1])
+        flow_distribution[edge] += 1
 
-    # Assign all vehicles to the best path
-    if best_path:
-        for i in range(len(best_path) - 1):
-            edge = (best_path[i], best_path[i + 1])
-            flow_distribution[edge] = vehicles
-
-    return flow_distribution
+    # Recursive call with one less vehicle
+    return compute_social_optimum(graph, vehicles - 1, start, end, flow_distribution)
 
 
-def plot_graph(graph, nash_eq):
-    pos = nx.shell_layout(graph)
+def plot_graph(graph, eq):
+    pos = nx.spring_layout(graph)
     edge_labels = {}
 
     for u, v in graph.edges():
         a, b = graph[u][v]["a"], graph[u][v]["b"]
-        flow = nash_eq.get((u, v), 0)
-        # travel_time = cost_function(flow, a, b)
-        # potential = travel_time * flow
-        edge_labels[(u, v)] = f"{a}x+{b}\nDrivers: {flow}"
+        flow = eq.get((u, v), 0)
+        potential = pe(flow, a, b)
+        edge_labels[(u, v)] = f"{a}x+{b}\nDrivers: {flow}\nTravel Time: {tt(flow, a, b)}\nPotential Power: {potential}"
 
     nx.draw(graph, pos, with_labels=True, node_color="lightblue", edge_color="gray", arrows=True)
     nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels)
-
     plt.show()
-
 
 def main():
     args = parse_arguments()
@@ -109,23 +123,33 @@ def main():
     nash_eq = compute_nash_equilibrium(graph, args.n, start, end)
     social_opt = compute_social_optimum(graph, args.n, start, end)
 
-    NE_PE = 0
-    SO_PE = 0
-
+    totaltt1 = 0
+    totaltt2 = 0
+    totalpe1 = 0
+    totalpe2 = 0
     print("Nash Equilibrium:")
     for edge, flow in nash_eq.items():
-        print(f"Edge {edge}: {flow} vehicles")
-        NE_PE += int(flow)
-    print(f"Potential Energy: {NE_PE}")
+        a = graph[edge[0]][edge[1]]["a"]
+        b = graph[edge[0]][edge[1]]["b"]
+        pp = pe(flow, a, b)
+        totalpe1 += pp
+        totaltt1 += tt(flow, a, b)
+        print(f"Edge {edge}: {flow} vehicles, Travel Time: {tt(flow, a, b)}, Potential Power: {pp}")
+    print(f"Social Cost {totaltt1}\nPotential Power {totalpe1}")
 
     print("\nSocial Optimum:")
     for edge, flow in social_opt.items():
-        print(f"Edge {edge}: {flow} vehicles")
-        SO_PE += int(flow)
-    print(f"Potential Energy: {SO_PE}")
+        a = graph[edge[0]][edge[1]]["a"]
+        b = graph[edge[0]][edge[1]]["b"]
+        pp = pe(flow, a, b)
+        totalpe2 += pp
+        totaltt2 += tt(flow, a, b)
+        print(f"Edge {edge}: {flow} vehicles, Travel Time: {tt(flow, a, b)}, Potential Power: {pp}")
+    print(f"Social Cost {totaltt2}\nPotential Power {totalpe2}")
 
     if args.plot:
         plot_graph(graph, nash_eq)
+        plot_graph(graph, social_opt)
 
 
 if __name__ == "__main__":
