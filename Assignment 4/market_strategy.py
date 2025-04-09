@@ -1,72 +1,121 @@
-import numpy as np
 import argparse
 import networkx as nx
 import matplotlib.pyplot as plt
+import sys
+from collections import defaultdict
 
 def parser_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("graph_file", type=str, help="Path to .gml file")
     parser.add_argument("--plot", action="store_true", help="Plot the graph")
     parser.add_argument("--interactive", action="store_true", help="Shows the output of every round graph")
-    return parser.parse_args
+    return parser.parse_args()
 
 def get_bipartite_sets(graph):
-    A = [node for node in graph.nodes if int(node) < len(graph.nodes // 2)]
-    B = [node for node in graph.nodes if int(node) >= len(graph.nodes) // 2]
-    return A, B
+    sellers = [node for node in graph.nodes if graph.nodes[node].get('bipartite') == 0]
+    buyers = [node for node in graph.nodes if graph.nodes[node].get('bipartite') == 1]
+    prices = {seller: graph.nodes[seller]['price'] for seller in sellers}
 
-def build_preference_graph(graph, A, B):
-    pref_graph = nx.DiGraph()
+    valuations = defaultdict(dict)
+    for buyer in buyers:
+        for seller in sellers:
+            if graph.has_edge(buyer, seller):
+                valuations[buyer][seller] = graph.edges[buyer, seller]['valuation']
+            elif graph.has_edge(seller, buyer):
+                valuations[buyer][seller] = graph.edges[seller, buyer]['valuation']
+            else:
+                valuations[buyer][seller] = float('-inf')
 
-    for b in B:
+    return sellers, buyers, prices, valuations
+
+def build_preference_set(sellers, buyers, prices, valuations):
+    pref_set = {}
+
+    for b in buyers:
         max_profit = float('-inf')
         best_sellers = []
 
-    for a in A:
-        if graph.has_edge(b, a):
-            value = graph.edge[b, a]['value']
-            price = graph.nodes[a]['price']
-            profit = value - price
+        for s in sellers:
+            profit = valuations[b][s] - prices[s]
+
             if profit > max_profit:
                 max_profit = profit
-                best_sellers = [a]
-            if profit == max_profit:
-                best_sellers.append(a)
-        
-        for a in best_sellers:
-            pref_graph.add_edge(b, a)
-    return pref_graph
+                best_sellers = [s]
+            elif profit == max_profit:
+                best_sellers.append(s)
+        pref_set = best_sellers
+    return pref_set
 
-def find_maximum_matching(pref_graph):
-    matching = {}
-    for b in pref_graph.nodes:
-        for a in pref_graph.successors(b):
-            if a not in matching.values():
-                matching[b] = a
-                break
-    return matching
+def pref_graph(sellers, buyers, prices, valuations, pref_set):
+    G = nx.DiGraph()
+    G.add_nodes_from(sellers, bipartite=0)
+    G.add_nodes_from(buyers, bipartite=1)
 
-def find_constricted_set(pref_graph, matching, A, B):
-    unmatched_buyers = [b for b in B if b not in matching]
-    visited_buyers = set()
-    reachable_sellers = set()
+    for b in buyers:
+        for s in pref_set[b]:
+            profit = valuations[b][s] - prices[s]
+            G.add_edge(b, s, weight=profit)
 
-    queue = unmatched_buyers[:]
-    while queue:
-        b = queue.pop(0)
-        for a in pref_graph.successors(b):
-            reachable_sellers.add(a)
-            # If matched, we explore matched buyer
-            matched_buyer = [buyer for buyer, seller in matching.items() if seller == a]
-            if matched_buyer:
-                next_b = matched_buyer[0]
-                if next_b not in visited_buyers:
-                    queue.append(next_b)
-    return reachable_sellers
+    return G
 
-def update_prices(graph, constricted_sellers, increment=1):
-    for a in constricted_sellers:
-        graph.nodes[a]['price'] += increment
+def find_constricted_set(G, sellers, buyers):
+    matching = nx.bipartite.maximum_matching(G, top_nodes = buyers)
+    if len(matching) == 2 * len(self.buyers):
+        return None
+    unmatched_buyers = [b for b in buyers if b not in matching]
+
+    res = nx.DiGraph()
+    res.add_nodes_from(G.nodes())
+    for i, j in G.edges():
+        if j in matching and matching[j] == i:
+            res.add_edge(j, i)
+        else:
+            res.add_edge(i, j)
+
+    constricted = set()
+    neighborhood = set()
+    for k in unmatched_buyers:
+        visited = set()
+        queue = [k]
+        while queue:
+            node = queue.pop()
+            if node in visited:
+                continue
+            visited.add(node)
+            if node in buyers:
+                constricted.add(node)
+            for neighbor in res.neighbors(node):
+                if neighbor not in visited:
+                    queue.append(neighbor)
+                    if neighbor in sellers:
+                        neighborhood.add(neighbor)
+
+    return (list(constricted), list(neighborhood)) if constricted else None
+
+
+def update_prices(graph, sellers, buyers, prices, valuations, constricted):
+    if not constricted:
+        return
+    
+    # buyers, sellers = constricted
+
+    demand = defaultdict(int)
+    pref = build_preference_set(buyers, sellers, prices, valuations)
+    for b in buyers:
+        for s in pref[b]:
+            if s in sellers:
+                demand[s] += 1
+
+    if not demand:
+        return
+    
+    max_demand = max(demand.values())
+    if max_demand <= 1:
+        return
+    
+    for s in sellers:
+        if demand.get(s, 0) == max_demand:
+            prices[s] += 1
 
 def plot_graph(graph, A, B):
     pos = {}
@@ -74,8 +123,8 @@ def plot_graph(graph, A, B):
     pos.update((node, (2, i)) for i, node in enumerate(B))
 
     plt.figure(figsize=(10, 6))
-    nx.draw(graph, pos, with_labels=True, node_color='blue', edge_color='black')
-    edge_labels = nx.get_edge_attributes(graph, 'value')
+    nx.draw(graph, pos, with_labels=True, node_color='lightblue', edge_color='black')
+    edge_labels = nx.get_edge_attributes(graph, 'valuation')
     nx.draw_networkx_edge_labels(graph, pos, edge_labels=edge_labels)
     plt.title("Bipartite Market Graph")
     plt.show()
@@ -97,20 +146,30 @@ def market_clearing(graph, A, B):
         if not constricted:
             print("No constricted set found")
             break
+
         print(f"Constricted sellers: {constricted}")
-        update_prices(graph, constricted)
-        round_num += 1
+        changed = update_prices(graph, constricted)
+        if not changed:
+            print("No price update. Exiting.")
+            break
+        round_number += 1
+        if round_number == 50:
+            break
 
 
 def main():
     args = parser_arguments()
-    graph = nx.read_graph(args.graph_file)
+    graph = nx.read_gml(args.graph_file)
+    graph = nx.relabel_nodes(graph, lambda x: int(x))
+    A, B = get_bipartite_sets(graph)
+    for a in A:
+        graph.nodes[a]['price'] = graph.nodes[a].get('price', 0)
+
     if args.plot:
-        pass
-        plot_graph(graph)
+        plot_graph(graph, A, B)
 
     if args.interactive:
-        pass
+        market_clearing(graph, A, B)
 
 if __name__ == "__main__":
     main()
