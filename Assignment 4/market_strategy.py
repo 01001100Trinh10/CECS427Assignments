@@ -180,7 +180,19 @@ def plot_graph(graph, sellers, buyers, prices, title, interactive):
     nx.draw_networkx_labels(graph, pos, labels=sellerLabels, ax=ax)
     nx.draw_networkx_labels(graph, pos, labels=buyerLabels, ax=ax)
     edgeLabels = {(u, v): f"{graph.edges[u, v]['weight']:.1f}" for u, v in graph.edges()}
-    nx.draw_networkx_edges(graph, pos, ax=ax)
+    
+    # Separate edges by direction
+    rightward_edges = []
+    leftward_edges = []
+
+    for u, v in graph.edges():
+        if pos[u][0] > pos[v][0]:  # going left
+            leftward_edges.append((u, v))
+        else:  # going right
+            rightward_edges.append((u, v))
+
+    # Draw edges with direction-based colors
+    nx.draw_networkx_edges(graph, pos, edgelist=graph.edges(), edge_color='black', ax=ax)
     nx.draw_networkx_edge_labels(graph, pos, edge_labels=edgeLabels, ax=ax)
 
     ax.set_title(title)
