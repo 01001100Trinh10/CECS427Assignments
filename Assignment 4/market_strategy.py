@@ -78,11 +78,13 @@ def pref_graph(sellers, buyers, prices, valuations, pref_set):
     G.add_nodes_from(sellers, bipartite=0)
     G.add_nodes_from(buyers, bipartite=1)
 
+    # Dynamic edge creation with direction tracking
     for b in buyers:
-        for s in pref_set[b]:
-            profit = valuations[b][s] - prices[s]
-            G.add_edge(b, s, weight=profit)
-
+        for s in sellers:
+            if b in pref_set.get(s, []):  # Seller-initiated edges (red)
+                G.add_edge(s, b, weight=valuations[b][s] - prices[s], direction='seller_to_buyer')
+            if s in pref_set.get(b, []):  # Buyer-initiated edges (black)
+                G.add_edge(b, s, weight=valuations[b][s] - prices[s], direction='buyer_to_seller')
     return G
 
 # Identifies constricted set
@@ -153,54 +155,34 @@ def update_prices(sellers, buyers, prices, pref, constricted):
 
 # Visualizes market graph
 def plot_graph(graph, sellers, buyers, prices, title, interactive):
-    pos = {}
-    colors = []
-    fig = plt.figure(figsize=(12, 10))
-    ax = fig.add_subplot(111)
+    plt.clf()
+    pos = {**{s: (0, i) for i, s in enumerate(sellers)},
+           **{b: (1, i) for i, b in enumerate(buyers)}}
 
-    # Sellers side
-    sellerY = 1.0
-    sellerStep = 1.0 / (len(sellers) + 1)
-    for i, s in enumerate(sellers):
-        pos[s] = (0, sellerY - (i + 1) * sellerStep)
-        colors.append('lightblue')
+    # Draw nodes
+    nx.draw_networkx_nodes(graph, pos, nodelist=sellers, node_color='lightblue', node_size=1000)
+    nx.draw_networkx_nodes(graph, pos, nodelist=buyers, node_color='lightgreen', node_size=1000)
 
-    # Buyers side
-    buyerY = 1.0
-    buyerStep = 1.0 / (len(buyers) + 1)
-    for i, s in enumerate(buyers):
-        pos[s] = (1, buyerY - (i + 1) * buyerStep)
-        colors.append('lightgreen')
+    # Draw labels
+    nx.draw_networkx_labels(graph, pos, labels={s: f"{s}\nprice:{prices[s]}" for s in sellers})
+    nx.draw_networkx_labels(graph, pos, labels={b: b for b in buyers})
 
-    nx.draw_networkx_nodes(graph, pos, node_size=1000, node_color=colors, ax=ax)
+    # Auto-color edges
+    for u, v, d in graph.edges(data=True):
+        edge_color = 'red' if d.get('direction') == 'seller_to_buyer' else 'black'
+        nx.draw_networkx_edges(graph, pos, edgelist=[(u, v)], edge_color=edge_color,
+                             arrows=True, arrowstyle='->')
 
-    # Labels nodes
-    sellerLabels = {s: f"{s}\nprice:{prices[s]}" for s in sellers}
-    buyerLabels = {b: b for b in buyers}
-    nx.draw_networkx_labels(graph, pos, labels=sellerLabels, ax=ax)
-    nx.draw_networkx_labels(graph, pos, labels=buyerLabels, ax=ax)
-    edgeLabels = {(u, v): f"{graph.edges[u, v]['weight']:.1f}" for u, v in graph.edges()}
-    
-    # Separate edges by direction
-    rightward_edges = []
-    leftward_edges = []
+    # Edge labels
+    nx.draw_networkx_edge_labels(graph, pos, 
+                                edge_labels={(u, v): f"{d['weight']:.1f}" 
+                                for u, v, d in graph.edges(data=True)})
 
-    for u, v in graph.edges():
-        if pos[u][0] > pos[v][0]:  # going left
-            leftward_edges.append((u, v))
-        else:  # going right
-            rightward_edges.append((u, v))
-
-    # Draw edges with direction-based colors
-    nx.draw_networkx_edges(graph, pos, edgelist=graph.edges(), edge_color='black', ax=ax)
-    nx.draw_networkx_edge_labels(graph, pos, edge_labels=edgeLabels, ax=ax)
-
-    ax.set_title(title)
+    plt.title(title)
     plt.tight_layout()
+    plt.show(block=not interactive)
     if interactive:
         plt.pause(0.5)
-    else:
-        plt.show(block=False)
     
 # Runs market clearing algorithm. The real stuff.
 def market_clearing(graph, plot=False, interactive=False):
