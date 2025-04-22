@@ -114,9 +114,9 @@ def main():
 
         pos = nx.spring_layout(graph, k=0.15, iterations=20)
 
-        nx.draw_networkx_nodes(graph, pos, node_size=50, node_color='skyblue')
-        nx.draw_networkx_edges(graph, pos, alpha=0.3)
-        nx.draw_networkx_labels(graph, pos, font_size=5)
+        nx.draw_networkx_nodes(graph, pos, node_size=25, node_color='skyblue')
+        nx.draw_networkx_edges(graph, pos, alpha=0.1)
+        # nx.draw_networkx_labels(graph, pos, font_size=5)
 
         plt.title("Crawled Web Graph")
         plt.axis('off')
