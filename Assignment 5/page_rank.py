@@ -32,7 +32,7 @@ def plot_loglog_degree(graph):
     degrees = [graph.degree(n) for n in graph.nodes()]
     values, counts = np.unique(degrees, return_counts=True)
     plt.figure()
-    plt.loglog(values, counts, marker="o", linestyle="None")
+    plt.loglog(values, counts)
     plt.title("Log-log plot of degree distribution")
     plt.xlabel("Degree")
     plt.ylabel("Frequency")
@@ -42,46 +42,88 @@ def plot_loglog_degree(graph):
 class LinkSpider(scrapy.Spider):
     name = "link_spider"
     custom_settings = {
-        'CLOSESPIDER_PAGECOUNT': 100,
-        'DOWNLOAD_DELAY': 1.5,
+        'DOWNLOAD_DELAY': 1.0,
         'DEPTH_LIMIT': 3,
-        'LOG_ENABLED': True,
         'LOG_LEVEL': 'INFO',
     }
 
-    def __init__(self, domain=None, start_urls=None, max_nodes=100, **kwargs):
+    def __init__(self, domain=None, start_urls=None, max_nodes=0, **kwargs):
         super().__init__(**kwargs)
-        self.allowed_domains = [domain]
+        self.allowed_domain = domain.replace("www.", "")
         self.start_urls = start_urls
         self.max_nodes = int(max_nodes)
         self.visited = set()
+        self.frontier = set(start_urls)
         self.graph = nx.DiGraph()
 
+    def start_requests(self):
+        for url in self.frontier:
+            yield scrapy.Request(url, callback=self.parse)
+
     def parse(self, response):
-        if len(self.visited) >= self.max_nodes:
-            raise CloseSpider('Max nodes reached')
-
-        current_url = response.url
-        if current_url in self.visited:
+        if not self._is_html_response(response):
             return
-        
-        print(f"[{len(self.visited)}/{self.max_nodes}] Crawling: {current_url}")
 
-        self.visited.add(current_url)
-        self.graph.add_node(current_url)
+        normalized_url = self._normalize_url(response.url)
+        if normalized_url in self.visited or len(self.visited) >= self.max_nodes:
+            return
 
-        for link in response.css('a::attr(href)').getall():
-            href = urljoin(current_url, link)
-            parsed = urlparse(href)
+        print(f"[{len(self.visited)}/{self.max_nodes}] Crawling: {normalized_url}")
+        self.visited.add(normalized_url)
+        self.frontier.discard(normalized_url)
+        self.graph.add_node(normalized_url)
 
-            if parsed.netloc not in self.allowed_domains:
+        links = response.css('a::attr(href)').getall()
+        for link in links:
+            href = urljoin(normalized_url, link)
+            href = self._normalize_url(href)
+
+            if not self._is_valid_url(href):
                 continue
-            if not href.endswith(('.html', '/')) or '#' in href:
-                continue
 
-            self.graph.add_edge(current_url, href)
-            if href not in self.visited:
-                yield scrapy.Request(href, callback=self.parse)
+            # Only queue if we haven’t visited, it’s valid, and we're under max_nodes
+            if href not in self.visited and href not in self.frontier and len(self.visited) + len(self.frontier) < self.max_nodes:
+                self.frontier.add(href)
+                yield scrapy.Request(
+                    href,
+                    callback=self.parse,
+                    dont_filter=True  # ensures even query variations are crawled
+                )
+
+            # Add edge only if it's in the allowed domain and ends in a valid extension
+            if self._url_likely_html(href):
+                self.graph.add_edge(normalized_url, href)
+
+    def _url_likely_html(self, url):
+        parsed = urlparse(url)
+        path = parsed.path.lower()
+        valid_extensions = ('.html', '.htm', '')  # allow paths with no extension too
+        return path.endswith(valid_extensions) or path.endswith('/')
+    
+    def _normalize_url(self, url):
+        parsed = urlparse(url)
+        clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+        return clean_url.rstrip('/')
+
+    def _is_valid_url(self, url):
+        parsed = urlparse(url)
+        domain = parsed.netloc.replace("www.", "")
+        path = parsed.path.lower()
+
+        # Only crawl pages from the same domain, with http/https, and likely HTML content
+        valid_extensions = ('.html', '.htm', '')  # Allow empty extension too
+        disallowed_extensions = ('.pdf', '.jpg', '.jpeg', '.png', '.gif', '.css', '.js', '.svg', '.ico', '.mp4', '.webp')
+
+        return (
+            domain == self.allowed_domain
+            and parsed.scheme in ["http", "https"]
+            and not any(path.endswith(ext) for ext in disallowed_extensions)
+            and path.endswith(valid_extensions) or path.endswith('/')
+        )
+    
+    def _is_html_response(self, response):
+        content_type = response.headers.get('Content-Type', b'').decode('utf-8').lower()
+        return 'text/html' in content_type
 
 def run_crawler(domain, seeds, max_nodes):
     process = CrawlerProcess(settings={"USER_AGENT": "Mozilla/5.0"})
@@ -105,6 +147,7 @@ def main():
     if args.crawler:
         max_nodes, domain, seeds = read_file(args.crawler)
         parsed_domain = domain.replace("https://", "").replace("http://", "").split("/")[0]
+        print(f"Max Nodes: {max_nodes}")
         print(f"Starting crawl on domain: {parsed_domain} with {len(seeds)} seeds")
         graph = run_crawler(parsed_domain, seeds, max_nodes)
         if args.crawler_graph:
@@ -114,7 +157,7 @@ def main():
 
         pos = nx.spring_layout(graph, k=0.15, iterations=20)
 
-        nx.draw_networkx_nodes(graph, pos, node_size=25, node_color='skyblue')
+        nx.draw_networkx_nodes(graph, pos, node_size=20, node_color='dodgerblue')
         nx.draw_networkx_edges(graph, pos, alpha=0.1)
         # nx.draw_networkx_labels(graph, pos, font_size=5)
 
@@ -127,8 +170,8 @@ def main():
         try:
             graph = nx.read_gml(args.input)
             print(f"Loaded {args.input}")
-            plt.figure(figsize=(15, 15))
-            pos = nx.spring_layout(graph, k=0.15, iterations=20)
+            plt.figure(figsize=(18, 18))
+            pos = nx.spring_layout(graph, k=0.1, iterations=20)
             nx.draw_networkx_nodes(graph, pos, node_size=50, node_color='skyblue')
             nx.draw_networkx_edges(graph, pos, alpha=0.3)
             nx.draw_networkx_labels(graph, pos, font_size=5)
